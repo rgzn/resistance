@@ -47,17 +47,18 @@ ram_data %>%
 ram_data %>% 
   mutate(in_core = st_contains(y = geometry, x = core_range, sparse = FALSE))
 
+
+# label excursions outside of homerange
 d = ram_data %>%
   mutate(in_core = t(st_contains(y = ., x = core_range, sparse = FALSE))) %>%
   group_by(AnimalID) %>%
-  mutate(core_exit = in_core - lag(in_core)) %>%
+  mutate(core_exit = lag(in_core) - in_core) %>%
   mutate(core_exit = replace_na(core_exit, 0)) %>%
-  filter(core_exit >= 0 ) %>%
-  mutate(exit_event = as.integer(cumsum(core_exit))) %>%
+  mutate(exit_event = cumsum( pmax(core_exit,0))) %>%
   ungroup()
 
-s20_data = d %>% filter(AnimalID == "S20")
-
+         
+  
 .# only data > certain lat
 north_data = ram_data %>% arrange(desc(UTM_N)) %>% slice(1)
 
