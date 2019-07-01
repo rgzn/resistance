@@ -37,3 +37,11 @@ read_snbs_shapefile = function(path) {
            geometry
     )
 }
+
+read_rasters = function(path, raster_type = "tif", proxy = FALSE, along = NA) {
+  file_pattern = paste0("*.", raster_type, "$")
+  raster_files = list.files(path, pattern = file_pattern, full.names = TRUE)
+  rasters = read_stars(raster_files, proxy = proxy, along)
+  return(rasters)
+}
+
