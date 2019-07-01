@@ -3,7 +3,7 @@ library(sf)
 # library(amt)
 library(lubridate)
 library(stars)
-
+library(raster)
 source("import.r")
 source("analyze.r")
 
@@ -14,12 +14,6 @@ ram_data_filename = "./shapefiles/AllRams2004_2016.shp"
 ram_data = read_snbs_shapefile(ram_data_filename)
 project_crs = st_crs(ram_data)
 
-# read herd unit polygons:
-herd_units_filename = "./shapefiles/All_SNBS_HerdUnits.shp"
-herd_units = herd_units_filename %>% 
-  st_read %>%
-  st_transform(crs = project_crs)
-
 # read core homerange polygons:
 core_range_filename = "./shapefiles/Kernels_Merged_Dissolved.shp"
 core_range = core_range_filename %>%
@@ -27,27 +21,21 @@ core_range = core_range_filename %>%
   st_transform(crs = project_crs)
 
 # Raster Data
-
-# read rsf:
-rsf_tif = "./rasters/rsfMap_20150316.tif"
-rsf = read_stars(rsf_tif, proxy = TRUE)
+cost_rasters = read_rasters(path, proxy = TRUE, along = "cost-dist")
 
 # find excursions outside homerange:
 ram_data = ram_data %>% 
   label_excursions(polygon = core_range)
 
 
+####################################################################
+
 s20_data = d %>% filter(AnimalID == "S20")
-         
-  
-.# only data > certain lat
+# only data > certain lat
 north_data = ram_data %>% arrange(desc(UTM_N)) %>% slice(1)
 
-
-  ## Plots
+## Plots
 theme_set(theme_minimal())
-
-
 
 ggplot() + 
   geom_sf(data = core_range, alpha = 0.2) +
