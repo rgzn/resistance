@@ -24,15 +24,15 @@ read_snbs_shapefile = function(path) {
     mutate(datetime = dt_from_date_time_str(Date, Time)) %>%
     select(datetime,
            AnimalID,
-           UTM_E,
-           UTM_N,
-           Method,
+#           UTM_E,
+#           UTM_N,
+#           Method,
            DOP,
            SV,
-           Fix,
-           CSNoDate,
+#           Fix,
+#           CSNoDate,
            HU,
-           RU,
+#           RU,
            Sex,
            geometry
     )
