@@ -85,29 +85,10 @@ get_excursions_with_buffers = function(points, polygon) {
   excursion_points <- 
     points %>% filter(!in_core)
   
-  # find maximum excursion distance for each event:
-  # event_max_dist <- 
-  #   event_polygons %>% 
-  #   as_tibble() %>% 
-  #   right_join(excursion_points, by = c("AnimalID", "exit_event")) %>% 
-  #   mutate(dist = st_distance(geometry.x, geometry.y, by_element = TRUE)) %>% 
-  #   group_by(AnimalID, exit_event) %>% 
-  #   summarize(max_dist = max(dist)) %>% 
-  #   mutate(max_dist = ifelse(is.na(max_dist), 0, max_dist))
-  
- # event_max_dist <- 
- #   animal_polygons %>% 
- #   as_tibble() %>% 
- #   right_join(excursion_points, by = c("AnimalID")) %>% 
- #   mutate(dist = st_distance(geometry.x, geometry.y, by_element = TRUE)) %>% 
- #   group_by(AnimalID, exit_event) %>% 
- #   summarize(max_dist = max(dist)) %>% 
- #   mutate(max_dist = ifelse(is.na(max_dist), 0, max_dist))
- 
+  # find endpoints of each excursions:
   excursion_endpoints <-
     animal_polygons %>%
-    as_tibble() %>%
-    right_join(excursion_points, by = c("AnimalID")) %>%
+    right_join(as_tibble(excursion_points), by = c("AnimalID")) %>%
     rename(geometry.core = geometry.x, 
            geometry.point = geometry.y) %>% 
     mutate(dist = st_distance(geometry.core, geometry.point, by_element = TRUE)) %>%
@@ -118,11 +99,13 @@ get_excursions_with_buffers = function(points, polygon) {
     rename(max_dist = dist,
            geometry.endpoint = geometry.point)
   
+  # find buffering polygons for each excursions:
   excursion_buffers <-
     excursion_endpoints %>%
     mutate(max_dist = ifelse(is.na(max_dist), 0, max_dist)) %>%
     mutate(geometry.buffer = st_buffer(geometry.core, dist = max_dist))
   
+  # merge excursion data with buffer data:
   excursions_with_buffers <-
     excursion_buffers %>%
     inner_join(as_tibble(excursions), by = c("AnimalID", "exit_event")) %>%
@@ -141,7 +124,28 @@ get_excursions_with_buffers = function(points, polygon) {
            geometry.endpoint,
            geometry.points) %>%
     filter(n_points > 1)
- 
+  
+  
+  
+  # find maximum excursion distance for each event:
+  # event_max_dist <- 
+  #   event_polygons %>% 
+  #   as_tibble() %>% 
+  #   right_join(excursion_points, by = c("AnimalID", "exit_event")) %>% 
+  #   mutate(dist = st_distance(geometry.x, geometry.y, by_element = TRUE)) %>% 
+  #   group_by(AnimalID, exit_event) %>% 
+  #   summarize(max_dist = max(dist)) %>% 
+  #   mutate(max_dist = ifelse(is.na(max_dist), 0, max_dist))
+  
+  # event_max_dist <- 
+  #   animal_polygons %>% 
+  #   as_tibble() %>% 
+  #   right_join(excursion_points, by = c("AnimalID")) %>% 
+  #   mutate(dist = st_distance(geometry.x, geometry.y, by_element = TRUE)) %>% 
+  #   group_by(AnimalID, exit_event) %>% 
+  #   summarize(max_dist = max(dist)) %>% 
+  #   mutate(max_dist = ifelse(is.na(max_dist), 0, max_dist))
+  
  # animal_polygons %>% 
  #   as_tibble() %>% 
  #   right_join(excursion_points, by = c("AnimalID")) %>% 
@@ -173,23 +177,21 @@ get_excursions_with_buffers = function(points, polygon) {
   # ggplot() + 
   #   geom_sf(data = event_buffers,  aes(color = as.factor(exit_event))) + 
   #   geom_sf(data = excursion_points,  aes(color = as.factor(exit_event)))
-  
-
 }
 
-excursions <- get_excursions_with_buffers(ram_data, core_range)
-ggplot() +  geom_point(data = excursions, aes(x = duration, y = max_dist))
-ggplot() + geom_histogram(data = excursions, aes(x=duration), binwidth = hours(24))
+ram_excursions <- get_excursions_with_buffers(ram_data, core_range)
+ggplot() +  geom_point(data = ram_excursions, aes(x = duration, y = max_dist))
+ggplot() + geom_histogram(data = ram_excursions, aes(x=duration), binwidth = hours(24))
 
 
 test_excursions <-
-  excursions %>% 
+  ram_excursions %>% 
   filter(AnimalID == "S20")
 
 POINTS_PER_M = 1/10000
 test_excursions <- 
   test_excursions %>% 
-  st_cast("LINESTRING") %>% 
+  st_cast("MULTILINESTRING") %>% 
   mutate(circumference = st_length(geometry.buffer)) %>% 
   mutate(n_samples = as.integer(circumference*POINTS_PER_M)) %>% 
   mutate(geometry.sample = st_sample(geometry.buffer, size = n_samples)) 
@@ -202,10 +204,11 @@ bbox_sf <-
 
 
 ggplot() + 
-  geom_stars(data = cd_stars[bbox_sf], downsample = 20) +
-  geom_sf(data = x) + 
-  geom_sf(data = x$geometry.sample, color = "green") +
-  geom_sf(data = x %>% select(geometry.points, exit_event), aes(color = exit_event))
+  geom_stars(data = cd_stars[bbox_sf], downsample = 20) + 
+  geom_sf(data = st_cast(test_excursions$geometry.buffer, "LINESTRING")) + 
+  geom_sf(data = test_excursions$geometry.points, color = "blue") + 
+  geom_sf(data = test_excursions$geometry.endpoint, color = "red")
+
 
 ##############################
 excursion_points <-
