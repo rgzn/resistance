@@ -30,22 +30,79 @@ if ( st_crs(cd_stars) != project_crs) st_transform(cd_stars, project_crs)
 # build excursions collection from ram data:
 ram_excursions <- get_excursions_with_buffers(ram_data, core_range)
 
+# ggplot() +  geom_point(data = ram_excursions, aes(x = duration, y = max_dist))
+# ggplot() + geom_histogram(data = ram_excursions, aes(x=duration), binwidth = hours(24))
 
-ggplot() +  geom_point(data = ram_excursions, aes(x = duration, y = max_dist))
-ggplot() + geom_histogram(data = ram_excursions, aes(x=duration), binwidth = hours(24))
-
-
+# subset of excursions for testing:
 test_excursions <-
   ram_excursions %>% 
-  filter(AnimalID == "S20")
+  filter(max_dist > 10000)
 
+# sample density:
 POINTS_PER_M = 1/10000
+
+# sample points equidistant to furthest excursion point:
 test_excursions <- 
   test_excursions %>% 
-  mutate(geometry.buffer = st_cast(geometry.buffer, "LINESTRING")) %>% 
+  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>% 
   mutate(circumference = st_length(geometry.buffer)) %>% 
   mutate(n_samples = as.integer(circumference*POINTS_PER_M)) %>% 
-  mutate(geometry.sample = st_sample(geometry.buffer, size = n_samples)) 
+  mutate(geometry.sample = map2(.x = .$geometry.buffer, 
+                                .y = .$n_samples,
+                                .f = function(.x, .y) {
+                                st_sample(.x, size = .y) %>% 
+                                    st_union() %>% 
+                                    st_set_crs(project_crs)
+                                }) %>% 
+           reduce(st_union)
+         )
+
+samples <- 
+  test_excursions %>% 
+  st_set_geometry("geometry.sample") %>% 
+  select(-geometry.core, -geometry.buffer, -geometry.points, -geometry.endpoint) %>% 
+  st_cast("POINT")
+
+ed_samplepoints <- st_sample_by_sf(cd_stars, samples) %>% 
+  mutate(real = FALSE)
+endpoints <- st_sample_by_sf(cd_stars, st_set_geometry(test_excursions, "geometry.endpoint")) %>% 
+  mutate(real = TRUE)
+
+# combine real and generated sample points with their cost values
+sampled_points <- endpoints %>% 
+  select(colnames(ed_samplepoints)) %>% 
+  rbind(ed_samplepoints)
+
+# spread to long format and generate percentile rank for cost:
+sampled_points <- sampled_points %>%
+  gather(key = "cost_layer",
+         value = "cost",
+         attr.V1,
+         attr.V2,
+         attr.V3,
+         attr.V4) %>% 
+  group_by(AnimalID, exit_event, cost_layer) %>% 
+  mutate(percrank=rank(cost)/length(cost))
+
+ggplot(data = sampled_points %>% filter(cost_layer == "attr.V1")) +
+  geom_point(aes(x = max_dist, y = cost, color = real, size = real), alpha = 0.4) +
+  ggtitle("Cost-Distance Values for Excursion Endpoints and Random Equidistant Points (-log ) ")
+
+ggplot(data = sampled_points %>% filter(cost_layer == "attr.V4")) +
+  geom_point(aes(x = max_dist, y = 100 - cost, color = real, size = real), alpha = 0.4) +
+  ggtitle("Cost-Distance Values for Excursion Endpoints and Random Equidistant Points (-exp4) ")
+
+ggplot(data = sampled_points %>% filter(real)) +
+  geom_point(aes(x = max_dist, y = percrank, color = cost_layer))
+
+
+ggplot(data = x) + 
+  geom_point(aes(x = max_dist, y = attr.V1), color = "black") 
+
+ggplot(data = x) + 
+  geom_point(aes(x = max_dist, y = attr.V1), color = "blue") +
+  geom_point(aes(x = max_dist, y = attr.V3), color = "red") +
+  geom_point(aes(x = max_dist, y = attr.V4), color = "green")
 
 bbox_sf <-
   test_excursions %>% 
@@ -55,61 +112,19 @@ bbox_sf <-
 
 
 ggplot() + 
-  geom_stars(data = cd_stars[bbox_sf], downsample = 20) + 
-  geom_sf(data = st_cast(test_excursions$geometry.buffer, "LINESTRING")) + 
-  geom_sf(data = test_excursions$geometry.points, color = "blue") + 
+  geom_stars(data = cd_stars[bbox_sf] %>% slice(cost_function, 1), downsample = 20) + 
+  geom_sf(data = test_excursions$geometry.buffer , alpha = 0, color = "khaki") + 
+  geom_sf(data = test_excursions$geometry.points, color = "orange") + 
   geom_sf(data = test_excursions$geometry.endpoint, color = "red") +
   geom_sf(data = test_excursions$geometry.sample, color = "yellow")
 
 
-##############################
-excursion_points <-
-  ram_data %>%  
-  label_excursions(core_range) %>% 
-  filter(!in_core)
 
-excursion_meta <-
-  excursion_points %>% 
-  group_by(AnimalID, exit_event) %>% 
-  mutate(distance = st_distance(geometry)[1,]) %>% 
-  summarise(duration = difftime(max(datetime), 
-                                min(datetime), 
-                                units = "secs"),
-            n_points = n(),
-            start_time = min(datetime),
-            end_time = max(datetime),
-            max_dist = max(distance))
+ggplot() + 
+  geom_sf(data = test_excursions$geometry.buffer, alpha = 0, color  = "darkblue") + 
+  geom_sf(data = test_excursions$geometry.endpoint, color = "red")
 
-
-
-###### ENCAPSULATE INTO FUNCTION TO APPLY ACROSS ANIMALS:
-ram_data %>% 
-  #group_by(AnimalID) %>% 
-  filter(AnimalID == "S20") ->
-  animal_data
-
-# find excursions from core:
-animal_data %>% 
-  label_excursions(core_range) ->
-  animal_data
-
-# make table of excursion data:
-animal_excursions <- animal_data %>%
-  filter(!in_core) %>% 
-  group_by(exit_event) %>% 
-  summarise(duration = difftime(max(datetime), 
-                                min(datetime), 
-                                units = "secs"),
-            n_points = n(),
-            start = min(datetime),
-            end = max(datetime)) %>% 
-  as_tibble() %>% 
-  dplyr::select(-geometry)
-
-
-
-excursion_data <- animal_data %>% 
-  filter(!in_core) %>% 
-  left_join(animal_excursions)
+ggplot() + 
+  geom_sf(data = test_excursions %>% st_set_geometry("geometry.sample"), aes(color = as.factor(exit_event)))
 
 
