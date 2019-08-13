@@ -36,26 +36,21 @@ ram_excursions <- get_excursions_with_buffers(ram_data, core_range)
 # subset of excursions for testing:
 test_excursions <-
   ram_excursions %>% 
-  filter(max_dist > 10000)
+  filter(max_dist > 5000)
 
 # sample density:
 POINTS_PER_M = 1/10000
 
 # sample points equidistant to furthest excursion point:
-test_excursions <- 
-  test_excursions %>% 
-  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>% 
-  mutate(circumference = st_length(geometry.buffer)) %>% 
-  mutate(n_samples = as.integer(circumference*POINTS_PER_M)) %>% 
-  mutate(geometry.sample = map2(.x = .$geometry.buffer, 
-                                .y = .$n_samples,
-                                .f = function(.x, .y) {
-                                st_sample(.x, size = .y) %>% 
-                                    st_union() %>% 
-                                    st_set_crs(project_crs)
-                                }) %>% 
-           reduce(st_union)
-         )
+
+test_excursions <-
+  test_excursions %>%
+  group_by(AnimalID, exit_event) %>%
+  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%
+  mutate(circumference = st_length(geometry.buffer)) %>%
+  mutate(n_samples = as.integer(circumference * POINTS_PER_M)) %>%
+  mutate(geometry.sample = st_union(st_sample(geometry.buffer, n_samples, type = "regular"))) %>%
+  ungroup()
 
 samples <- 
   test_excursions %>% 
@@ -95,21 +90,12 @@ ggplot(data = sampled_points %>% filter(cost_layer == "attr.V4")) +
 ggplot(data = sampled_points %>% filter(real)) +
   geom_point(aes(x = max_dist, y = percrank, color = cost_layer))
 
-
-ggplot(data = x) + 
-  geom_point(aes(x = max_dist, y = attr.V1), color = "black") 
-
-ggplot(data = x) + 
-  geom_point(aes(x = max_dist, y = attr.V1), color = "blue") +
-  geom_point(aes(x = max_dist, y = attr.V3), color = "red") +
-  geom_point(aes(x = max_dist, y = attr.V4), color = "green")
-
 bbox_sf <-
   test_excursions %>% 
+  st_union() %>% 
   st_bbox() %>% 
   st_as_sfc() %>% 
   st_buffer(dist = 1000)
-
 
 ggplot() + 
   geom_stars(data = cd_stars[bbox_sf] %>% slice(cost_function, 1), downsample = 20) + 
@@ -125,6 +111,6 @@ ggplot() +
   geom_sf(data = test_excursions$geometry.endpoint, color = "red")
 
 ggplot() + 
-  geom_sf(data = test_excursions %>% st_set_geometry("geometry.sample"), aes(color = as.factor(exit_event)))
+  geom_sf(data = test_excursions %>% st_set_geometry("geometry.buffer"), aes(color = as.factor(exit_event)))
 
 
