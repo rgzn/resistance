@@ -22,7 +22,7 @@ read_snbs_shapefile = function(path) {
   snbs_data = sf::st_read(path)
   snbs_data %>%
     mutate(datetime = dt_from_date_time_str(Date, Time)) %>%
-    select(datetime,
+    dplyr::select(datetime,
            AnimalID,
 #           UTM_E,
 #           UTM_N,
@@ -38,6 +38,8 @@ read_snbs_shapefile = function(path) {
     )
 }
 
+# read_rasters
+# reads all raster files at `path` and returns a stars object
 read_rasters = function(path, raster_type = "tif", proxy = FALSE, along = NA) {
   file_pattern = paste0("*.", raster_type, "$")
   raster_files = list.files(path, pattern = file_pattern, full.names = TRUE)

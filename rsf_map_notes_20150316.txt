@@ -1,0 +1,99 @@
+2015 03 16 model map output notes:
+
+rsf generated from tables below
+
+files:
+M:\SNBSData\RSF\RSF_ram_disease_model\Outputs\model_ras_out_2015_03_16
+
+rsfMap_20150316.tif :
+	rsf map, generated from model output
+	
+rsfMap_rescale01_20150316.tif :
+	rsf map rescaled similar to maya's model from 0 to 1 (max and min vals from rsf map streched to 0 and 1 )
+	( using formula (x-min)/(max - min)  )
+
+friction_rsfMap_rescale01_invert_20150316.tif :
+	friction layer, rescaled rsf map inverted, using 1-x 
+
+
+
+glm model
+Call:
+glm(formula = used ~ elevkm + slope + slope2 + hill + tdesclog + 
+    trees + tvrs + taspectarcsin + vegcover + (tdesclog * vegcover), 
+    family = binomial, data = DataAll3)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-1.3927  -0.6475  -0.4994  -0.2942   3.1291  
+
+Coefficients:
+                       Estimate Std. Error  z value Pr(>|z|)    
+(Intercept)           -1.587645   0.012374 -128.309  < 2e-16 ***
+elevkm                 0.282381   0.008486   33.277  < 2e-16 ***
+slope                  0.262174   0.014758   17.765  < 2e-16 ***
+slope2                -0.210489   0.007055  -29.837  < 2e-16 ***
+hill                   0.318124   0.007715   41.237  < 2e-16 ***
+tdesclog               0.016487   0.015643    1.054  0.29191    
+trees                 -0.392923   0.026298  -14.941  < 2e-16 ***
+tvrs                   0.155496   0.006638   23.426  < 2e-16 ***
+taspectarcsin         -0.201592   0.008585  -23.481  < 2e-16 ***
+vegcoverDEV           -8.671177 116.889678   -0.074  0.94087    
+vegcoverHEB            0.700826   0.041869   16.739  < 2e-16 ***
+vegcoverSHB            0.370669   0.018927   19.585  < 2e-16 ***
+vegcoverTRE           -0.195598   0.030613   -6.389 1.67e-10 ***
+vegcoverWAT           -0.950936   0.301656   -3.152  0.00162 ** 
+tdesclog:vegcoverDEV   1.055609 105.464721    0.010  0.99201    
+tdesclog:vegcoverHEB  -0.320252   0.044889   -7.134 9.73e-13 ***
+tdesclog:vegcoverSHB  -0.342627   0.016022  -21.385  < 2e-16 ***
+tdesclog:vegcoverTRE  -0.429048   0.019580  -21.912  < 2e-16 ***
+tdesclog:vegcoverWAT  -0.851286   0.333855   -2.550  0.01078 *
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+input tables for r script:
+
+veg data:  
+
+  ID RSFveg        v1        v2  Mod_veg_id    mod_co    mod_veg_esc_d_log  mod_co.1
+1  1    TRE -0.195598 -0.429048 vegcoverTRE -0.195598 tdesclog:vegcoverTRE -0.429048
+2  2    BAR  0.000000  0.000000   reference  0.000000                       0.000000
+3  3    HEB  0.700826 -0.320252 vegcoverHEB  0.700826 tdesclog:vegcoverHEB -0.320252
+4  4    SHB  0.370669 -0.342627 vegcoverSHB  0.370669 tdesclog:vegcoverSHB -0.342627
+5  5    WAT -0.950936 -0.851286 vegcoverWAT -0.950936 tdesclog:vegcoverWAT -0.851286
+6  6    DEV -8.671177  1.055609 vegcoverDEV -8.671177 tdesclog:vegcoverDEV  1.055609
+
+
+transformations:
+	Note: slope squared first standardized then then squared, better for maintaining quadradic relationship
+
+                        RasIn       RasOut                   TransExp1           NormExp1       Mean1         Sd1
+1                    esc_dist esc_dist_log                    log(x+1) x<-(x-co.mn)/co.sd   3.0264310  2.53743600
+2                  rsf_aspect aspectarcsin x<-asin(sqrt((abs(x)/360))) x<-(x-co.mn)/co.sd   0.7314308  0.33217590
+3                     rsf_dem      elev_km                   x<-x/1000 x<-(x-co.mn)/co.sd   3.1034870  0.49741160
+4                rsf_hilshade    hillshade                        x<-x x<-(x-co.mn)/co.sd 148.9743000 62.31733000
+5                   rsf_slope        slope                        x<-x x<-(x-co.mn)/co.sd  26.7169600 12.48947000
+6                   rsf_slope     slope_sq          x<-(x-co.mn)/co.sd             x<-x^2  26.7169600 12.48947000
+7                   rsf_trees        trees                        x<-x               x<-x          NA          NA
+8  rsf_veg_covertype_20150122    veg_coef1                          v1               x<-x          NA          NA
+9  rsf_veg_covertype_20150122    veg_coef2                          v2               x<-x          NA          NA
+10                     vr_7x7      vr_sqrt                  x<-sqrt(x) x<-(x-co.mn)/co.sd   0.1382471  0.08480258
+
+
+Model data:
+
+          ModOut         ras1         ras2 beta_coef
+1    (Intercept)          int            x -1.587645
+2         elevkm      elev_km            x  0.282381
+3          slope        slope            x  0.262174
+4         slope2     slope_sq            x -0.210489
+5           hill    hillshade            x  0.318124
+6       tdesclog esc_dist_log            x  0.016487
+7          trees        trees            x -0.392923
+8           tvrs      vr_sqrt            x  0.155496
+9  taspectarcsin aspectarcsin            x -0.201592
+10           veg    veg_coef1            x  1.000000
+11     veg_d_esc    veg_coef2 esc_dist_log  1.000000
+
+

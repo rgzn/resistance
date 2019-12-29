@@ -20,7 +20,7 @@ st_sample_by_sf = function(stars_object, sf_object) {
     aggregate(sf_object,
               function(x) x[1], 
               as_points = FALSE) %>% 
-    st_as_sf %>% 
+    st_as_sf() %>% 
     st_intersection(sf_object)
 }
 
@@ -85,16 +85,16 @@ get_excursions_with_buffers = function(points, polygon) {
     group_by(AnimalID, exit_event) %>%
     summarize()
   
-  # core polygons associated with events:
-  event_polygons <-
-    event_multipoints %>% 
-    st_join(polygons, left = FALSE) %>% 
-    as_tibble() %>% 
-    select(-geometry) %>% 
-    left_join(polygons) %>% 
-    st_as_sf() %>% 
-    group_by(AnimalID, exit_event) %>% 
-    summarize()
+  # # core polygons associated with events:
+  # event_polygons <-
+  #   event_multipoints %>% 
+  #   st_join(polygons, left = FALSE) %>% 
+  #   as_tibble() %>% 
+  #   select(-geometry) %>% 
+  #   left_join(polygons) %>% 
+  #   st_as_sf() %>% 
+  #   group_by(AnimalID, exit_event) %>% 
+  #   summarize()
   
   # core polygons associated with animals:
   animal_polygons <-
@@ -149,6 +149,7 @@ get_excursions_with_buffers = function(points, polygon) {
            geometry.buffer,
            geometry.endpoint,
            geometry.points) %>%
+    st_set_geometry("geometry.buffer") %>% 
     filter(n_points > 1)
   
   
