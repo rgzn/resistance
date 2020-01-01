@@ -24,7 +24,9 @@ core_range = core_range_filename %>%
 # read cost-distance layers:
 cd_dir = "./rasters/costdistance"
 cd_files = list.files(path = cd_dir, pattern = "*tif$", full.names = TRUE)
-cd_stars = read_stars(cd_files, along = "cost_function", proxy = TRUE)
+# produced 1 attribute with 4 dimensions:
+# cd_stars = read_stars(cd_files, along = "cost_function", proxy = TRUE) 
+cd_stars = read_rasters(path = cd_dir)
 if ( st_crs(cd_stars) != project_crs) st_transform(cd_stars, project_crs)
 
 # build excursions collection from ram data:
@@ -47,9 +49,8 @@ test_excursions <-
 POINTS_PER_M = 1/10000
 
 # sample points equidistant to furthest excursion point:
-
 test_excursions <-
-  test_excursions %>%
+  test_excursions %>% 
   group_by(AnimalID, exit_event) %>%
   mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%
   mutate(circumference = st_length(geometry.buffer)) %>%

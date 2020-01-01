@@ -39,20 +39,25 @@ st_rotate = function(sf_object, rot_angle, units = "degrees", center = NULL) {
   }
   
   # (sf_object - center) * rot_M + center
-  sf_object %>% 
-    mutate(geometry = (geometry - center) * rot_M + center )
+  # does not work for geometry columns not named 'geometry':
+  # sf_object %>% 
+  #   mutate(geometry = (geometry - center) * rot_M + center )
+  geom = st_geometry(sf_object)
+  geom_rotated = (geom - center) * rot_M + center
+  sf_object_rotated = st_set_geometry(sf_object, geom_rotated)
+  return(sf_object_rotated)
 }
 
 
-negexp_resist = function(x, b) {
-  # 1 - (1 - exp(-b * x) / (1 - exp(-b)))
-  x * (-b) %>% 
-    exp()*-1 %>%
-    `+`(1) %>% 
-    `/`(1 - exp(-b)) %>% 
-    `*`(-1) %>% 
-    `+`(1)
-}
+# negexp_resist = function(x, b) {
+#   # 1 - (1 - exp(-b * x) / (1 - exp(-b)))
+#   x * (-b) %>% 
+#     exp()*-1 %>%
+#     `+`(1) %>% 
+#     `/`(1 - exp(-b)) %>% 
+#     `*`(-1) %>% 
+#     `+`(1)
+# }
 
 get_excursions_with_buffers = function(points, polygon) {
   
