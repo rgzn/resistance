@@ -24,4 +24,9 @@ transformations = c(constant_transform,
                     make_negexp(b = 32))
 
 # Cost layers:
-rsf %>% mutate(cost = rsf*2)
+cost = rsf
+attributes(cost)$names <- "cost"
+cost1 = -log(cost)
+cost2 = (exp(cost*(-16)) - 1)/(1-exp(-16)) + 1
+
+ggplot() + geom_stars(data = cost2, downsample = 20)
