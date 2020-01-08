@@ -30,3 +30,5 @@ cost1 = -log(cost)
 cost2 = (exp(cost*(-16)) - 1)/(1-exp(-16)) + 1
 
 ggplot() + geom_stars(data = cost2, downsample = 20)
+
+rsf %>% mutate(cost = -log(rsf))
