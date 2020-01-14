@@ -17,6 +17,7 @@ label_excursions = function(points, polygon) {
 # get values of stars object at points from sf objects
 st_sample_by_sf = function(stars_object, sf_object) {
   stars_object %>% 
+    st_crop(sf_object) %>% 
     aggregate(sf_object,
               function(x) x[1], 
               as_points = FALSE) %>% 
