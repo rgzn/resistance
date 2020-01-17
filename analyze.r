@@ -1,6 +1,7 @@
 library(tidyverse)
 library(sf)
 library(stars)
+library(geobgu)
 
 # label excursions outside of homerange
 label_excursions = function(points, polygon) {
@@ -12,6 +13,18 @@ label_excursions = function(points, polygon) {
     mutate(exit_event = cumsum( pmax(core_exit,0))) %>%
     ungroup() %>%
     dplyr::select(-core_exit)
+}
+
+# get values of stars object at points from sf objects
+# this version relies on the raster, geobgu packages.
+raster_extract_layers = function(stars_object, sf_object) {
+  sf_temp = sf_object
+  for(layer in attributes(stars_object)$names) {
+    sf_temp %>% mutate(
+      !!layer := geobgu::raster_extract(stars_object %>% select(layer), sf_temp, na.rm = TRUE)) ->
+      sf_temp
+  }
+  return(sf_temp)
 }
 
 # get values of stars object at points from sf objects

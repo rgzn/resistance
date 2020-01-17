@@ -2,6 +2,7 @@ library(tidyverse)
 library(sf)
 library(lubridate)
 library(stars)
+library(geobgu)
 library(nngeo)
 # library(raster)
 
@@ -26,48 +27,81 @@ core_range = core_range_filename %>%
 # read cost-distance layers:
 cd_dir = "./rasters/costdistance"
 cd_files = list.files(path = cd_dir, pattern = "*tif$", full.names = TRUE)
-# produced 1 attribute with 4 dimensions:
-# cd_stars = read_stars(cd_files, along = "cost_function", proxy = TRUE) 
 cd_stars = read_rasters(path = cd_dir)
 if ( st_crs(cd_stars) != project_crs) st_transform(cd_stars, project_crs)
 
-# build excursions collection from ram data:
-# ram_excursions <- get_excursions_with_buffers(ram_data, core_range)
+# Correct for inconsistent cost distance rasters:
+# this section may be removed when cost distance are all in terms of cost 
+# s.t. cost increases with distance
+cd_stars <- cd_stars %>% 
+  mutate(FINALCD_Constant1.tif = 100 - FINALCD_Constant1.tif,
+         FINALCD_NegExp2.tif = 100 - FINALCD_NegExp2.tif,
+         FINALCD_NegExp4.tif = 100 - FINALCD_NegExp4.tif)
 
-MIN_DISTANCE = units::as_units(14000, 'm')
+# create pseudopoints for each point:
+MIN_DISTANCE = units::as_units(8000, 'm') #no points below this distance are included
 ram_data %>%
-  tibble::rowid_to_column("id") %>% 
-  mutate(dist_from_core =  st_distance(x = geometry, y = core_range)) %>% 
-  filter(dist_from_core > MIN_DISTANCE) %>% 
-  mutate(geometry.core = core_range$geometry) %>% 
-  mutate(geometry.buffer = st_buffer(geometry.core, dist = dist_from_core)) %>% 
-  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>% 
-  mutate(buffer.circumference = st_length(geometry.buffer)) %>% 
-  mutate(n_samples = 10) %>% 
-  group_by(id) %>% 
+  tibble::rowid_to_column("id") %>%                                             # give unique id to each point
+  mutate(dist_from_core =  st_distance(x = geometry, y = core_range)) %>%       # calculate distance from core
+  filter(dist_from_core > MIN_DISTANCE) %>%                                     # remove close points
+  mutate(geometry.core = core_range$geometry) %>%                               # incorporate core range as a column
+  mutate(geometry.buffer = st_buffer(geometry.core, dist = dist_from_core)) %>% # create buffer polygons
+  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%     # convert buffers to linestrings
+  mutate(buffer.circumference = st_length(geometry.buffer)) %>%                 # find circumference of buffers
+  mutate(n_samples = 50) %>%                                                    # choose number of fake points
+  group_by(id) %>%                                                              # generate fakepoint geometries
   mutate(geometry.pseudopoints = st_union(st_sample(geometry.buffer, n_samples, type = "regular"))) %>% 
   ungroup() ->
-  x
+  real_data
+
+# Generate sf collection of just the fake points:
+fake_data <- real_data %>% 
+  mutate(geometry = geometry.pseudopoints) %>% 
+  # st_set_geometry("geometry.pseudopoints") %>% 
+  st_cast("POINT")
+
+# Label real and fake data:
+real_data <- real_data %>% mutate(real = TRUE)
+fake_data <- fake_data %>% mutate(real = FALSE)
+
+# combine real and fake data:
+all_data <- rbind(real_data, fake_data)
+
+# remove unnecessary data:
+all_data <- all_data %>% select(-DOP,
+                                -SV, 
+                                -n_samples,
+                                -geometry.pseudopoints,
+                                -geometry.core,
+                                -buffer.circumference,
+                                -geometry.buffer)
+rm(real_data, fake_data)
+
+# Extract raster values of CD layers for all points
+all_data <- raster_extract_layers(cd_stars, all_data)
+
+# Transform to long data frame:
+all_data <- all_data %>%
+  gather(key = "cost_layer",
+         value = "cost",
+         contains("CD"))
+
+# Calculate percentile rank for each cohort of points with a shared
+#   real point and cost layer
+all_data <- all_data %>% 
+  group_by(id, cost_layer) %>% 
+  mutate(percrank = ntile(cost, 100))
 
 
-x %>% 
-  select(-geometry.core, -geometry.buffer, -buffer.circumference) %>% 
-  st_set_geometry("geometry.pseudopoints") %>% 
-  st_cast("POINT") ->
-  y
-
-y <-
-  y %>% mutate(
-    cdMean = raster_extract(cd_stars, primates_meso, fun = mean, na.rm = TRUE),
-    cdMax = raster_extract(cd_stars, primates_meso, fun = max, na.rm = TRUE),
-    cdMin = raster_extract(cd_stars, primates_meso, fun = min, na.rm = TRUE)
-  )
-
-y <- st_sample_by_sf(cd_stars, y)
+ggplot(data = all_data %>% filter(real == TRUE, cost_layer %in% c("CD_NegLog.tif","FINALCD_NegExp4.tif") )  )+
+  geom_point(aes(x = dist_from_core, y = percrank, color = cost_layer), size = 3.0, alpha = 0.4)
 
 
-ggplot() + geom_sf(data = x) + geom_sf(data = x$geometry.buffer) + geom_sf(data = core_range)
+ggplot(data = all_data %>% filter(cost_layer == "FINALCD_Constant1.tif")) +
+  geom_point(aes(x = dist_from_core, y = cost, color = real), size = 3.0, alpha = 0.4)
 
+ggplot(data = all_data %>% filter(cost_layer == "FINALCD_NegExp4.tif")) +
+  geom_point(aes(x = dist_from_core, y = cost, color = real), size = 3.0, alpha = 0.4)
 
-
-
+ggplot(data = all_data %>% filter(cost_layer == "CD_NegLog.tif")) +
+  geom_point(aes(x = dist_from_core, y = cost, color = real), size = 3.0, alpha = 0.4)
