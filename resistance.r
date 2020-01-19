@@ -105,7 +105,7 @@ resistance_functions = list(neglog_resist, negexp_resist, const_resist)
 rsf_resistance = neglog_resist(rsf)
 
 # rsf_transistions = gdistance::transition(rsf_resistance, transitionFunction = mean, directions = 8)
-rsf_transistions = gdistance::transition(rsf_resistance, 
+rsf_transitions = gdistance::transition(rsf_resistance, 
                                          transitionFunction = function(x) {1/mean(x)},
                                          directions = 8)
   
