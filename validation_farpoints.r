@@ -13,16 +13,32 @@ source("import.r")
 
 # read ram location data:
 ram_data_filename = "./shapefiles/AllRams2004_2016.shp"
-ram_data = read_snbs_shapefile(ram_data_filename)
+ram_data = read_snbs_shapefile(ram_data_filename) %>% 
+  select(-DOP, -SV, -Sex)
 
 # Use ram data CRS as project CRS:
 project_crs = st_crs(ram_data)
 
 # read core homerange polygons:
-core_range_filename = "./shapefiles/Kernels_Merged_Dissolved.shp"
-core_range = core_range_filename %>%
-  st_read %>%
-  st_transform(crs = project_crs)
+core_range_dir = "./shapefiles/HomeRange2016_2019EwesRams_1yrPost_95%KDE_Plugin"
+core_range_files = list.files(path = core_range_dir, 
+                              pattern = "*shp$", 
+                              full.names = TRUE)
+core_range <- core_range_files %>% 
+  map(st_read) %>%
+  map(function(x) st_transform(x, crs = project_crs)) %>% 
+  reduce(st_union) %>% 
+  mutate(Id = 0) %>% 
+  select(Id, geometry) 
+
+## Simplify core range geometry 
+# this makes it take less memory and speed up distance computations
+core_range = st_simplify(core_range, preserveTopology = FALSE, dTolerance = 200)
+
+# core_range_filename = "./shapefiles/Kernels_Merged_Dissolved.shp"
+# core_range_single_shp = core_range_filename %>%
+#   st_read %>%
+#   st_transform(crs = project_crs)
 
 # read cost-distance layers:
 cd_dir = "./rasters/costdistance"
@@ -32,7 +48,7 @@ if ( st_crs(cd_stars) != project_crs) st_transform(cd_stars, project_crs)
 
 
 # Invert rasters to make sure they are in terms of cost:
-cd_stars  = 100 - cd_stars
+# cd_stars  = 100 - cd_stars
 
 # Correct for inconsistent cost distance rasters:
 # this section may be removed when cost distance are all in terms of cost 
@@ -44,8 +60,10 @@ cd_stars  = 100 - cd_stars
 
 # create pseudopoints for each point:
 MIN_DISTANCE = units::as_units(2000, 'm') #no points below this distance are included
+core_range_buffer = core_range %>% st_buffer(dist = MIN_DISTANCE)
 ram_data %>%
-  tibble::rowid_to_column("id") %>%                                             # give unique id to each point
+  tibble::rowid_to_column("id") %>% # give unique id to each point
+  st_difference(core_range_buffer) %>%    # speeds things up by only taking into account points outside the polygons
   mutate(dist_from_core =  st_distance(x = geometry, y = core_range)) %>%       # calculate distance from core
   filter(dist_from_core > MIN_DISTANCE) %>%                                     # remove close points
   mutate(geometry.core = core_range$geometry) %>%                               # incorporate core range as a column
@@ -72,9 +90,7 @@ fake_data <- fake_data %>% mutate(real = FALSE)
 all_data <- rbind(real_data, fake_data)
 
 # remove unnecessary data:
-all_data <- all_data %>% select(-DOP,
-                                -SV, 
-                                -n_samples,
+all_data <- all_data %>% select(-n_samples,
                                 -geometry.pseudopoints,
                                 -geometry.core,
                                 -buffer.circumference,
@@ -141,19 +157,49 @@ qplot(dist_from_core, percrank, data = fitted_data, geom = 'point', colour = cos
 
 
 
-ggplot(data = all_data %>% filter(cost_layer == "Exp8.tif")) +
-  geom_point(aes(x = dist_from_core, y = cost, color = real, alpha = (0.1 + 0.9*real)))
+ggplot(data = all_data %>% 
+         filter(cost_layer == "Exp8.tif") %>% 
+         arrange(real)) +
+  geom_point(aes(x = dist_from_core, y = cost, color = real, alpha = (0.1 + 0.5*real)))
 
-ggplot(data = all_data %>% filter(cost_layer == "Exp16.tif")) +
-  geom_point(aes(x = dist_from_core, y = cost, color = real, alpha = (0.1 + 0.9*real)))
+ggplot(data = all_data %>% 
+         filter(cost_layer == "ln.tif") %>% 
+         arrange(real)) +
+  geom_point(aes(x = dist_from_core, y = cost, color = real, alpha = (0.1 + 0.5*real)))
 
-ggplot(data = all_data %>% arrange(real)) +
+ggplot() +
+  geom_point(data = all_data %>% 
+               filter(cost_layer == "ln.tif") %>% 
+               filter(real == TRUE),
+             aes(x = dist_from_core, y = cost, alpha = (0.1 + 0.5*real)),
+             color = "blue") +
+  geom_pointdensity(data = all_data %>% 
+                      filter(cost_layer == "ln.tif") %>% 
+                      filter(real == FALSE),
+                    aes(x = dist_from_core, y = cost),
+                    na.rm = TRUE)
+                    
+
+
+
+all_costs_plot <- ggplot(data = all_data %>% arrange(real)) +
   facet_wrap( ~ cost_layer, ncol = 3) + 
   geom_point(aes(x = dist_from_core, 
                  y = cost, 
                  color = real, 
-                 alpha = (0.05 + 0.9*real),
-                 size = 0.1 + .06*real))
+                 alpha = (0.05 + 0.5*real)),
+             size = 0.1) 
+
+all_costs_plot
+
+all_percranks_plot <- ggplot(data = all_data %>% 
+                               filter(real == TRUE)) +
+  facet_wrap( ~ cost_layer, ncol = 3) + 
+  geom_point(aes(x = dist_from_core, 
+                 y = percrank, 
+                 color = real, 
+                 alpha = (0.05 + 0.5*real)),
+             size = 0.1) 
 
 
 # ggplot(data = all_data %>% filter(cost_layer == "FINALCD_NegExp4.tif")) +
