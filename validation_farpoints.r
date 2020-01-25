@@ -60,21 +60,41 @@ if ( st_crs(cd_stars) != project_crs) st_transform(cd_stars, project_crs)
 
 # create pseudopoints for each point:
 MIN_DISTANCE = units::as_units(2000, 'm') #no points below this distance are included
-core_range_buffer = core_range %>% st_buffer(dist = MIN_DISTANCE)
-ram_data %>%
+# core_range_buffer = core_range %>% 
+#   st_buffer(dist = MIN_DISTANCE) %>%  # buffer distance
+#   st_simplify(dTolerance = 20)        # simplfication for reduced size
+# 
+
+valid_data <- ram_data  %>%
+  # head(100) %>%                   # use to test for a few points
   tibble::rowid_to_column("id") %>% # give unique id to each point
-  st_difference(core_range_buffer) %>%    # speeds things up by only taking into account points outside the polygons
+  # st_difference(core_range_buffer) %>%    # speeds things up by only taking into account points outside the polygons
   mutate(dist_from_core =  st_distance(x = geometry, y = core_range)) %>%       # calculate distance from core
-  filter(dist_from_core > MIN_DISTANCE) %>%                                     # remove close points
-  mutate(geometry.core = core_range$geometry) %>%                               # incorporate core range as a column
-  mutate(geometry.buffer = st_buffer(geometry.core, dist = dist_from_core)) %>% # create buffer polygons
-  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%     # convert buffers to linestrings
+  filter(as.integer(dist_from_core) > 0) %>% 
+  mutate(geometry.buffer = 
+           get_buffers(distances = dist_from_core, sf_object = core_range)$geometry) %>%  # add buffer polygons for each point
+  mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%                    # convert buffers to linestrings
   mutate(buffer.circumference = st_length(geometry.buffer)) %>%                 # find circumference of buffers
   mutate(n_samples = 100) %>%                                                    # choose number of fake points
   group_by(id) %>%                                                              # generate fakepoint geometries
   mutate(geometry.pseudopoints = st_union(st_sample(geometry.buffer, n_samples, type = "regular"))) %>% 
   ungroup() ->
   real_data
+
+# ram_data %>% 
+#   filter(as.integer(dist_from_core) > 0) %>% 
+#   mutate(geometry.buffer = get_buffers(distances = dist_from_core, sf_object = core_range)) -> p
+#   # filter(dist_from_core > MIN_DISTANCE) %>%                                     # remove close points
+#   # mutate(geometry.core = core_range$geometry) %>%                               # incorporate core range as a column
+#   # mutate(geometry.buffer = st_buffer(geometry.core, dist = dist_from_core)) %>% # create buffer polygons
+#   mutate(geometry.buffer = st_buffer(core_range, dist_from_core)) %>% 
+#   mutate(geometry.buffer = st_cast(geometry.buffer, "MULTILINESTRING")) %>%     # convert buffers to linestrings
+#   mutate(buffer.circumference = st_length(geometry.buffer)) %>%                 # find circumference of buffers
+#   mutate(n_samples = 10) %>%                                                    # choose number of fake points
+#   group_by(id) %>%                                                              # generate fakepoint geometries
+#   mutate(geometry.pseudopoints = st_union(st_sample(geometry.buffer, n_samples, type = "regular"))) %>% 
+#   ungroup() ->
+#   real_data
 
 # Generate sf collection of just the fake points:
 fake_data <- real_data %>% 
@@ -92,10 +112,10 @@ all_data <- rbind(real_data, fake_data)
 # remove unnecessary data:
 all_data <- all_data %>% select(-n_samples,
                                 -geometry.pseudopoints,
-                                -geometry.core,
+                                #-geometry.core,
                                 -buffer.circumference,
                                 -geometry.buffer)
-rm(real_data, fake_data)
+rm(real_data, fake_data, valid_data)
 
 # Extract raster values of CD layers for all points
 all_data <- raster_extract_layers(cd_stars, all_data)
