@@ -31,12 +31,12 @@ raster_extract_layers = function(stars_object, sf_object) {
 # vectorized production of buffer objects
 # inputs a single sf, and a vector of distances to produce
 # an sf collection with multiple buffers
+# outputs tibble with just the buffer geometries
 get_buffers <- function(distances, sf_object) {
   distances %>% 
     map(.f = function(x) st_buffer(sf_object, dist = x)) %>% 
     reduce(rbind) %>% 
     select(geometry)
-  
 }
 
 # get values of stars object at points from sf objects
